@@ -1,0 +1,90 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner() {
+      return request.auth.uid == resource.data.userId;
+    }
+
+    function isWritingAsOwner() {
+      return request.auth.uid == request.resource.data.userId;
+    }
+
+    // Validates that a field is a non-empty string within a max length
+    function isValidString(field, maxLen) {
+      return field is string && field.size() > 0 && field.size() <= maxLen;
+    }
+
+    // Validates connection fields
+    function isValidConnection() {
+      let data = request.resource.data;
+      return isValidString(data.name, 80)
+          && data.keys().hasOnly(['userId', 'name', 'createdAt', 'updatedAt']);
+    }
+
+    // Validates contact fields
+    function isValidContact() {
+      let data = request.resource.data;
+      return isValidString(data.name, 100)
+          && isValidString(data.phone, 30)
+          && isValidString(data.connectionId, 128)
+          && data.keys().hasOnly(['userId', 'connectionId', 'name', 'phone', 'createdAt', 'updatedAt']);
+    }
+
+    // Validates message fields
+    function isValidMessage() {
+      let data = request.resource.data;
+      return isValidString(data.content, 1000)
+          && isValidString(data.connectionId, 128)
+          && data.contactIds is list
+          && data.contactIds.size() > 0
+          && data.contactIds.size() <= 500
+          && data.status in ['scheduled', 'sent']
+          && data.keys().hasOnly([
+               'userId', 'connectionId', 'contactIds', 'content',
+               'status', 'scheduledAt', 'sentAt', 'createdAt', 'updatedAt'
+             ]);
+    }
+
+    match /connections/{connectionId} {
+      allow read:   if isAuthenticated() && isOwner();
+      allow create: if isAuthenticated() && isWritingAsOwner() && isValidConnection();
+      allow update: if isAuthenticated() && isOwner() && isValidString(request.resource.data.name, 80);
+      allow delete: if isAuthenticated() && isOwner();
+    }
+
+    match /contacts/{contactId} {
+      allow read:   if isAuthenticated() && isOwner();
+      allow create: if isAuthenticated() && isWritingAsOwner() && isValidContact();
+      allow update: if isAuthenticated() && isOwner()
+                    && isValidString(request.resource.data.name, 100)
+                    && isValidString(request.resource.data.phone, 30);
+      allow delete: if isAuthenticated() && isOwner();
+    }
+
+    match /templates/{templateId} {
+  allow read:   if isAuthenticated() && isOwner();
+  allow create: if isAuthenticated() && isWritingAsOwner()
+                && isValidString(request.resource.data.name, 80)
+                && isValidString(request.resource.data.content, 1000);
+  allow update: if isAuthenticated() && isOwner();
+  allow delete: if isAuthenticated() && isOwner();
+}
+
+match /onboarding/{userId} {
+  allow read, write: if isAuthenticated() && request.auth.uid == userId;
+}
+
+    match /messages/{messageId} {
+      allow read:   if isAuthenticated() && isOwner();
+      allow create: if isAuthenticated() && isWritingAsOwner() && isValidMessage();
+      allow update: if isAuthenticated() && isOwner();
+      allow delete: if isAuthenticated() && isOwner();
+    }
+  }
+}

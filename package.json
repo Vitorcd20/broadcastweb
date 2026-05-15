@@ -1,0 +1,10 @@
+{
+  "name": "broadcast",
+  "private": true,
+  "workspaces": ["web", "functions"],
+  "scripts": {
+    "dev": "npm run dev --workspace=web",
+    "build": "npm run build --workspace=web",
+    "deploy:functions": "npm run deploy --workspace=functions"
+  }
+}
